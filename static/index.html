@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <title>Заметки</title>
+        <link rel="stylesheet" href="style.css">
+    </head>
+
+    <body>
+        <div class="container">
+            <h1>Список</h1>
+            <button onclick="openModal()">Создать заметку</button>
+            <button id="deleteSelectedBtn" onclick="deleteSelected()">Delete Selected</button>
+            <button onclick="logout()">Выйти</button>
+            <div class="filters">
+                <input
+                    type="text"
+                    id="searchInput"
+                    placeholder="Поиск заметок..."
+                    oninput="loadNotes()"
+                >
+
+                <select id="tagFilter" onchange="loadNotes()">
+                    <option value="">Все теги</option>
+                    <option value="Работа">Работа</option>
+                    <option value="Личное">Личное</option>
+                    <option value="Здоровье">Здоровье</option>
+                    <option value="Саморазвитие">Саморазвитие</option>
+                    <option value="Важное">Важное</option>
+                    <option value="Срочное">Срочное</option>
+                </select>
+
+                <div class="date-filters">
+                    <label>
+                        От:
+                        <input type="date" id="startDate" onchange="loadNotes()">
+                    </label>
+
+                    <label>
+                        До:
+                        <input type="date" id="endDate" onchange="loadNotes()">
+                    </label>
+                </div>
+            </div>
+            <ul id="list"></ul>
+                <div id="pagination" class="pagination">
+                <button id="prevPageBtn" onclick="previousPage()">← Назад</button>
+                <span id="pageInfo"></span>
+                <button id="nextPageBtn" onclick="nextPage()">Вперёд →</button>
+            </div>
+        </div>
+
+        <div id="noteModal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeModal()">&times;</span>
+                <h2 id="modalHeading">Новая заметка</h2>
+                <textarea id="modalTitle" placeholder="Введите название..."></textarea>
+                <textarea id="modalText" placeholder="Введите текст заметки..."></textarea>
+                <input type="hidden" id="editingNoteId">
+
+                <div class="tags-container">
+                    <p>Теги</p>
+                    <div id="tagsSelector" class ="tags-selector">
+
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button onclick="closeModal()">Отмена</button>
+                    <button onclick="saveNoteFromModal()">Сохранить</button>
+                </div>
+            </div>
+        </div>
+
+        <script>    
+            const token = localStorage.getItem('access_token');
+            let selectedTags = [];
+            let currentPage = 1;
+            const NOTES_PER_PAGE = 5;
+
+            if (!token) {
+                window.location.href = '/login.html';
+            }
+
+            function authHeaders() {
+            return {
+                'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+            };
+}
+            const API_URL = '/api/notes';
+            const PREMADE_TAGS = ["Работа", "Личное", "Здоровье", "Саморазвитие", "Важное", "Срочное"]
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            function updatePagination(data) {
+                const pagination = document.getElementById('pagination');
+                const prevButton = document.getElementById('prevPageBtn');
+                const nextButton = document.getElementById('nextPageBtn');
+                const pageInfo = document.getElementById('pageInfo');
+
+                if (data.total_pages <= 1) {
+                    pagination.style.display = 'none';
+                    return;
+                }
+
+                pagination.style.display = 'flex';
+
+                pageInfo.textContent =
+                    `Страница ${data.page} из ${data.total_pages}`;
+
+                prevButton.disabled = data.page === 1;
+                nextButton.disabled = data.page === data.total_pages;
+            }
+
+            function previousPage() {
+                if (currentPage > 1) {
+                    currentPage--;
+                    loadNotes();
+                }
+            }
+
+            function nextPage() {
+                currentPage++;
+                loadNotes();
+            }
+            async function loadNotes() {
+                try {
+                    const search = document.getElementById('searchInput').value.trim();
+                    const tag = document.getElementById('tagFilter').value;
+                    const startDate = document.getElementById('startDate').value;
+                    const endDate = document.getElementById('endDate').value;
+
+                    const params = new URLSearchParams();
+
+                    if (search) params.append('search', search);
+                    if (tag) params.append('tag', tag);
+                    if (startDate) params.append('start_date', startDate);
+                    if (endDate) params.append('end_date', endDate);
+                    params.append('page', currentPage);
+                    params.append('limit', NOTES_PER_PAGE);
+
+                    const url = params.toString()
+                        ? `${API_URL}?${params.toString()}`
+                        : API_URL;
+
+                    const response = await fetch(url, {
+                        headers: authHeaders()
+                    });
+
+                                        if (response.status === 401) {
+                        localStorage.removeItem('access_token');
+                        window.location.href = '/login.html';
+                        return;
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    updatePagination(data);
+                    const notes = data.items;
+                    
+                    const list = document.getElementById('list');
+                
+                    if (notes.length === 0) {
+                        list.innerHTML = '<li style="text-align:center; color:#777;">Список пуст</li>';
+                        list.classList.remove('visible');
+                        updateDeleteButtonVisibility(); 
+                        return;
+                    }
+
+                    list.innerHTML = notes.map(n => {
+                        const tagsHtml = (n.tags && n.tags.length > 0) 
+                            ? `<div class="note-tags">${n.tags.map(t => `<span class="note-tag">${escapeHtml(t)}</span>`).join('')}</div>` 
+                            : '';
+                        return `
+                       <li>
+                        <input type="checkbox" 
+                            class="select-checkbox" 
+                            data-id="${n.id}" 
+                            onchange="updateDeleteButtonVisibility()">
+                        <div class="note-content" onclick="openModal(${n.id})" title="Нажмите для редактирования">
+
+                        <div class="note-section note-title-section">
+                            <div class="section-label">Название</div>
+                            <div class="note-title">${escapeHtml(n.title || 'Без названия')}</div>
+                        </div>
+
+                        <div class="note-section note-text-section">
+                            <div class="section-label">Текст</div>
+                            <div class="note-text">${escapeHtml(n.text)}</div>
+                        </div>
+
+                        ${n.tags && n.tags.length > 0 ? `
+                            <div class="note-section note-tags-section">
+                                <div class="section-label">Теги</div>
+                                <div class="note-tags">
+                                    ${n.tags.map(t => `
+                                        <span class="note-tag">${escapeHtml(t)}</span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+
+                    </div>
+                        <div class="actions">
+                            <button onclick="openModal(${n.id})">Edit</button>
+                        </div>
+                    </li>
+                    `}).join('');
+                    
+                    list.classList.add('visible');
+                    
+                    updateDeleteButtonVisibility();
+                    } catch (error) {
+                        console.error('Error loading notes:', error);
+                    }
+                    
+            }
+            function logout() {
+                localStorage.removeItem('access_token');
+                window.location.href = '/login.html';
+            }
+            function renderTagsSelector() {
+                const container = document.getElementById('tagsSelector');
+                container.innerHTML = '';
+                PREMADE_TAGS.forEach(tag => {
+                    const tagEl = document.createElement('div');
+                    tagEl.className = 'tag-option';
+                    tagEl.textContent = tag;
+                    if (selectedTags.includes(tag)) {
+                        tagEl.classList.add('active');
+                    }
+                    tagEl.onclick = () => toggleTag(tag);
+                    container.appendChild(tagEl);
+                });
+            }
+
+            function toggleTag(tag) {
+                if (selectedTags.includes(tag)) {
+                    selectedTags = selectedTags.filter(t => t !== tag);
+                } else {
+                    selectedTags.push(tag);
+                }
+                renderTagsSelector();
+            }
+            
+            async function openModal(noteId = null) {
+                const modal = document.getElementById('noteModal');
+                const heading = document.getElementById('modalHeading');
+                const titleInput = document.getElementById('modalTitle');
+                const textArea = document.getElementById('modalText');
+                const hiddenId = document.getElementById('editingNoteId');
+
+                if (noteId) {
+                    try {
+                        const response = await fetch(`/api/notes/${noteId}`, {
+                            headers: authHeaders()
+                        });
+                        if (!response.ok) {
+                            if (response.status === 404) {
+                                alert('Заметка не найдена');
+                                return;
+                            }
+                            throw new Error('Ошибка загрузки заметки');
+                        }
+                        const note = await response.json();
+                        heading.textContent = 'Редактировать заметку';
+                        titleInput.value = note.title || '';
+                        textArea.value = note.text;
+                        hiddenId.value = note.id;
+                        selectedTags = note.tags || [];
+                    } catch (error) {
+                        console.error('Ошибка:', error);
+                        alert('Не удалось загрузить заметку');
+                        return;
+                    }
+                } else {
+                    heading.textContent = 'Новая заметка';
+                    titleInput.value = '';
+                    textArea.value = '';
+                    hiddenId.value = '';
+                    selectedTags = [];
+                }
+                
+                renderTagsSelector();
+                modal.style.display = 'block';
+                titleInput.focus();
+            }
+
+            function closeModal() {
+                document.getElementById('noteModal').style.display = 'none';
+            }
+
+
+            async function saveNoteFromModal() {
+                const text = document.getElementById('modalText').value.trim();
+                const title = document.getElementById('modalTitle').value.trim();
+                const id = document.getElementById('editingNoteId').value;
+
+                if (!text) {
+                    alert('Текст заметки не может быть пустым');
+                    return;
+                }
+                
+                const payload = {
+                    title: title || 'Заметка',
+                    text: text,
+                    tags: selectedTags
+                };
+
+                try {
+                    if (id) {
+                        await fetch(`${API_URL}/${id}`, {
+                        method: 'PUT',
+
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                        },
+
+                        body: JSON.stringify(payload)
+                    });
+                    } else {
+                        await fetch(API_URL, {
+                        method: 'POST',
+
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                        },
+
+                        body: JSON.stringify(payload)
+                    });
+                    }
+                    
+                    closeModal();
+                    loadNotes();
+                } catch (error) {
+                    console.error('Error saving note:', error);
+                    alert('Не удалось сохранить заметку. Попробуйте снова.');
+                }
+            }
+            
+            async function deleteSelected() {
+                const selectedCheckboxes = document.querySelectorAll('.select-checkbox:checked');
+                
+                if (selectedCheckboxes.length === 0) {
+                    return;
+                }
+                
+                const idsToDelete = Array.from(selectedCheckboxes).map(cb => 
+                    parseInt(cb.getAttribute('data-id'))
+                );
+                
+                console.log('IDs to delete:', idsToDelete);
+                
+                try {
+                    const deletePromises = idsToDelete.map(id =>
+                        fetch(`${API_URL}/${id}`, {
+                            method: 'DELETE',
+                            headers: authHeaders()
+                        })
+                    );
+
+                await Promise.all(deletePromises);
+                    
+                    console.log('All selected notes deleted successfully');
+                    await loadNotes();
+                    
+                } catch (error) {
+                    console.error('Error deleting notes:', error);
+                    alert('Failed to delete some notes. Please try again.');
+                }
+            }
+
+            function updateDeleteButtonVisibility() {
+                const deleteBtn = document.getElementById('deleteSelectedBtn');
+                const checkedBoxes = document.querySelectorAll('.select-checkbox:checked');
+                
+                if (checkedBoxes.length > 0) {
+                    deleteBtn.classList.add('visible');
+                } else {
+                    deleteBtn.classList.remove('visible');
+                }
+            }
+
+            async function addNote() {
+                const inputElement = document.getElementById('inputText');
+                const text = inputElement.value;
+                
+                if (!text) return;
+
+                const noteData = {
+                    text: text
+                };
+                console.log("Sending data:", JSON.stringify(noteData)); 
+                try {
+                    const res = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(noteData)
+                    });
+                    
+                    if (!res.ok) {
+                        const errorData = await res.json();
+                        console.error('Server Error:', errorData);
+                        throw new Error('Failed to add note');
+                    }
+                    
+                    inputElement.value = '';
+                    loadNotes();
+                } catch (error) {
+                    console.error('Error adding note:', error);
+                }
+            }
+
+            async function updateNote(id) {
+            const newText = document.getElementById(`text-${id}`).value;
+            
+            await fetch(`${API_URL}/${id}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text: newText})
+            });
+            loadNotes();
+            }
+
+
+            async function del(id) {
+                try {
+                    await fetch(`${API_URL}/${id}`, {method: 'DELETE'});
+                    loadNotes();
+                } catch (error) {
+                    console.error('Error deleting note:', error);
+                }
+            }
+
+            loadNotes();
+    </script>
+    </body>
+</html>

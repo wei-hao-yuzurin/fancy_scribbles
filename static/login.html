@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Вход</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="auth-container">
+
+    <h1>Заметки</h1>
+
+    <div id="loginForm">
+
+        <h2>Войти</h2>
+
+        <input
+            type="email"
+            id="loginEmail"
+            placeholder="Email"
+        >
+
+        <input
+            type="password"
+            id="loginPassword"
+            placeholder="Пароль"
+        >
+
+        <button onclick="login()">
+            Войти
+        </button>
+
+        <p>
+            Нет аккаунта?
+            <a href="#" onclick="showRegister()">
+                Зарегистрироваться
+            </a>
+        </p>
+
+    </div>
+
+
+    <div id="registerForm" style="display:none;">
+
+        <h2>Регистрация</h2>
+
+        <input
+            type="email"
+            id="registerEmail"
+            placeholder="Email"
+        >
+
+        <input
+            type="password"
+            id="registerPassword"
+            placeholder="Пароль"
+        >
+
+        <button onclick="register()">
+            Зарегистрироваться
+        </button>
+
+        <p>
+            Уже есть аккаунт?
+            <a href="#" onclick="showLogin()">
+                Войти
+            </a>
+        </p>
+
+    </div>
+
+</div>
+
+
+<script>
+
+function showRegister() {
+    document.getElementById('loginForm').style.display = 'none';
+    document.getElementById('registerForm').style.display = 'block';
+}
+
+
+function showLogin() {
+    document.getElementById('registerForm').style.display = 'none';
+    document.getElementById('loginForm').style.display = 'block';
+}
+
+
+async function register() {
+
+    const email = document.getElementById('registerEmail').value;
+    const password = document.getElementById('registerPassword').value;
+
+    try {
+
+        const response = await fetch('/api/register', {
+
+            method: 'POST',
+
+            headers: {
+                'Content-Type': 'application/json'
+            },
+
+            body: JSON.stringify({
+                email: email,
+                password: password
+            })
+
+        });
+
+
+        if (!response.ok) {
+
+            const error = await response.json();
+
+            alert(error.detail || 'Ошибка регистрации');
+
+            return;
+        }
+
+
+        alert('Регистрация успешна! Теперь войдите.');
+
+        showLogin();
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        alert('Ошибка соединения с сервером');
+
+    }
+
+}
+
+
+async function login() {
+
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+
+
+    const formData = new URLSearchParams();
+
+    formData.append('username', email);
+    formData.append('password', password);
+
+
+    try {
+
+        const response = await fetch('/api/token', {
+
+            method: 'POST',
+
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+
+            body: formData
+
+        });
+
+
+        if (!response.ok) {
+
+            const error = await response.json();
+
+            alert(error.detail || 'Неверный email или пароль');
+
+            return;
+
+        }
+
+
+        const data = await response.json();
+
+
+        localStorage.setItem(
+            'access_token',
+            data.access_token
+        );
+
+
+        window.location.href = '/';
+
+    }
+
+    catch (error) {
+
+        console.error(error);
+
+        alert('Ошибка соединения');
+
+    }
+
+}
+
+</script>
+
+</body>
+</html>
