@@ -323,7 +323,7 @@ def update_note(
     note_id: int, 
     updated_note: Note, 
     db: Session = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user) # <--- PROTECTED
+    current_user: UserDB = Depends(get_current_user)
 ):
     note_db = db.query(NoteDB).filter(NoteDB.id == note_id, NoteDB.owner_id == current_user.id).first()
     if not note_db:
@@ -349,7 +349,7 @@ def update_note(
 def delete_note(
     note_id: int, 
     db: Session = Depends(get_db),
-    current_user: UserDB = Depends(get_current_user) # <--- PROTECTED
+    current_user: UserDB = Depends(get_current_user) 
 ):
     note_db = db.query(NoteDB).filter(NoteDB.id == note_id, NoteDB.owner_id == current_user.id).first()
     if not note_db:
