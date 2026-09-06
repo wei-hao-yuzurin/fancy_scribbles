@@ -67,9 +67,10 @@ Date: Sun, 06 Sep 2026 05:25:53 GMT
 Content-Type: application/json
 Content-Length: 126
 Connection: keep-alive
-```
 
 {"id":10,"title":"Моя заметка","text":"Текст заметки","tags":["Работа"],"created_at":"2026-09-06"}
+```
+
 ```bash
 url -i -X GET http://193.187.93.217/api/notes \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZXhwIjoxNzg4NjczMTU5fQ.UbeSMjqJBgcHwyCz3noL5NfWiKHFO1V0DdS3ztkSCrU"
